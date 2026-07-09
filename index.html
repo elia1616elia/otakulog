@@ -137,6 +137,15 @@
     transition:transform .12s ease;
   }
   .card:active{ transform:scale(0.985); }
+  .card-num{
+    font-family:'JetBrains Mono', monospace;
+    font-weight:600;
+    font-size:0.85rem;
+    color:var(--grey);
+    width:22px;
+    text-align:right;
+    flex-shrink:0;
+  }
   .thumb{
     width:44px;height:60px;
     background:var(--grey);
@@ -553,10 +562,11 @@ function starString(n){
 const TYPE_LABELS = { anime: 'ANIME', manga: 'MANGA', tvshow: 'SERIE TV' };
 const TYPE_LABELS_FULL = { anime: 'Anime', manga: 'Manga', tvshow: 'Serie TV / Cartoni' };
 
-function cardHtml(item){
+function cardHtml(item, num){
   return `
     <div class="card" data-id="${item.id}">
       ${item.rating >= 5 ? '<div class="hanko">TOP</div>' : ''}
+      ${num ? `<div class="card-num">${num}</div>` : ''}
       ${item.cover
         ? `<img class="thumb" src="${item.cover}" alt="">`
         : `<div class="thumb empty-thumb">?</div>`}
@@ -598,12 +608,12 @@ function render(){
         + subset.map(cardHtml).join('');
     }).join('');
   } else {
-    const subset = items.filter(i => i.type === currentTab).sort((a,b)=> b.addedAt - a.addedAt);
+    const subset = items.filter(i => i.type === currentTab).sort((a,b)=> a.addedAt - b.addedAt);
     if(subset.length === 0){
       list.innerHTML = `<div class="empty">Lista vuota.<br>Scrivi un titolo qui sopra per iniziare.</div>`;
       return;
     }
-    list.innerHTML = subset.map(cardHtml).join('');
+    list.innerHTML = subset.map((item, idx) => cardHtml(item, idx+1)).join('');
   }
 
   document.querySelectorAll('.card').forEach(card=>{
