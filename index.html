@@ -69,6 +69,14 @@
     color:var(--ink);
     border-bottom-color:var(--vermillion);
   }
+  .tab-count{
+    font-family:'JetBrains Mono', monospace;
+    font-weight:400;
+    font-size:0.72rem;
+    color:var(--grey);
+    margin-left:3px;
+  }
+  .tab.active .tab-count{ color:var(--vermillion); }
   .addbar{
     display:flex;
     gap:8px;
@@ -168,6 +176,33 @@
     letter-spacing:0.5px;
   }
   .stars{ color:var(--gold); letter-spacing:1px; }
+  .fav-section-title{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:700;
+    font-size:0.82rem;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--grey);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:22px 2px 8px;
+  }
+  .fav-section-title:first-child{ margin-top:2px; }
+  .fav-section-title .count{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.68rem;
+    padding:1px 7px;
+    border-radius:10px;
+  }
+  .fav-section-title::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
   .hanko{
     position:absolute;
     top:6px;right:8px;
@@ -236,6 +271,33 @@
     color:#2a2724;
   }
   .synopsis.none{ color:var(--grey); font-style:italic; }
+  .notes-row{ margin-top:18px; }
+  .notes-label{
+    font-size:0.72rem; color:var(--grey); font-family:'JetBrains Mono';
+    margin-bottom:5px; letter-spacing:0.5px;
+  }
+  .notes-row textarea{
+    width:100%;
+    min-height:70px;
+    padding:10px 12px;
+    border:1.5px solid var(--ink);
+    background:var(--paper-2);
+    border-radius:3px;
+    font-family:'Noto Sans', sans-serif;
+    font-size:0.88rem;
+    color:var(--ink);
+    resize:vertical;
+  }
+  .notes-row textarea:focus{ outline:2px solid var(--vermillion); outline-offset:1px; }
+  .notes-saved{
+    font-family:'JetBrains Mono';
+    font-size:0.68rem;
+    color:var(--grey);
+    margin-top:4px;
+    opacity:0;
+    transition:opacity .2s;
+  }
+  .notes-saved.show{ opacity:1; }
   .modal-actions{
     display:flex;
     gap:10px;
@@ -308,8 +370,9 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-tab="anime">Anime</div>
-  <div class="tab" data-tab="manga">Manga</div>
+  <div class="tab active" data-tab="anime">Anime<span class="tab-count" id="count-anime"></span></div>
+  <div class="tab" data-tab="manga">Manga<span class="tab-count" id="count-manga"></span></div>
+  <div class="tab" data-tab="tvshow">Serie TV<span class="tab-count" id="count-tvshow"></span></div>
   <div class="tab" data-tab="fav">Preferiti</div>
 </div>
 
@@ -366,8 +429,8 @@ async function saveItems(){
   }
 }
 
-// --- Jikan API search ---
-async function searchTitle(query, type){
+// --- Jikan API search (anime/manga) ---
+async function searchJikan(query, type){
   const endpoint = type === 'anime' ? 'anime' : 'manga';
   const url = `https://api.jikan.moe/v4/${endpoint}?q=${encodeURIComponent(query)}&limit=1`;
   const res = await fetch(url);
@@ -378,11 +441,34 @@ async function searchTitle(query, type){
     return {
       cover: d.images && d.images.jpg ? d.images.jpg.image_url : '',
       synopsis: d.synopsis || '',
-      matchedTitle: d.title || query,
-      malId: d.mal_id || null
+      matchedTitle: d.title || query
     };
   }
   return null;
+}
+
+// --- TVMaze API search (serie TV / cartoni) ---
+async function searchTVMaze(query){
+  const url = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('network');
+  const data = await res.json();
+  if(data && data.length > 0){
+    const d = data[0].show;
+    // TVMaze restituisce la trama con tag <p> html, la ripuliamo
+    const plain = d.summary ? d.summary.replace(/<[^>]+>/g, '') : '';
+    return {
+      cover: d.image ? (d.image.original || d.image.medium) : '',
+      synopsis: plain,
+      matchedTitle: d.name || query
+    };
+  }
+  return null;
+}
+
+async function searchTitle(query, type){
+  if(type === 'tvshow') return searchTVMaze(query);
+  return searchJikan(query, type);
 }
 
 document.getElementById('addBtn').addEventListener('click', addItem);
@@ -395,7 +481,7 @@ async function addItem(){
   const btn = document.getElementById('addBtn');
   const raw = input.value.trim();
   if(!raw) return;
-  const type = currentTab === 'manga' ? 'manga' : 'anime';
+  const type = currentTab; // 'anime' | 'manga' | 'tvshow'
 
   btn.disabled = true;
   btn.textContent = 'Cerco...';
@@ -414,6 +500,7 @@ async function addItem(){
     cover: meta ? meta.cover : '',
     synopsis: meta ? meta.synopsis : '',
     rating: 0,
+    note: '',
     addedAt: Date.now()
   };
   items.unshift(newItem);
@@ -440,8 +527,18 @@ document.querySelectorAll('.tab').forEach(tabEl=>{
     } else {
       wrap.style.display = 'flex';
       hint.style.display = 'block';
-      document.getElementById('titleInput').placeholder =
-        currentTab === 'anime' ? 'Scrivi un titolo anime...' : 'Scrivi un titolo manga...';
+      const placeholders = {
+        anime: 'Scrivi un titolo anime...',
+        manga: 'Scrivi un titolo manga...',
+        tvshow: 'Scrivi una serie TV o un cartone...'
+      };
+      const hints = {
+        anime: 'Cerco copertina e trama automaticamente su MyAnimeList.',
+        manga: 'Cerco copertina e trama automaticamente su MyAnimeList.',
+        tvshow: 'Cerco copertina e trama automaticamente su TVmaze.'
+      };
+      document.getElementById('titleInput').placeholder = placeholders[currentTab];
+      hint.textContent = hints[currentTab];
     }
     render();
   });
@@ -453,25 +550,11 @@ function starString(n){
   return s;
 }
 
-function render(){
-  const list = document.getElementById('list');
-  let subset;
-  if(currentTab === 'fav'){
-    subset = items.filter(i => i.rating >= 4).sort((a,b)=> b.rating - a.rating || b.addedAt - a.addedAt);
-  } else {
-    subset = items.filter(i => i.type === currentTab).sort((a,b)=> b.addedAt - a.addedAt);
-  }
+const TYPE_LABELS = { anime: 'ANIME', manga: 'MANGA', tvshow: 'SERIE TV' };
+const TYPE_LABELS_FULL = { anime: 'Anime', manga: 'Manga', tvshow: 'Serie TV / Cartoni' };
 
-  if(subset.length === 0){
-    list.innerHTML = `<div class="empty">${
-      currentTab === 'fav'
-        ? 'Ancora nessun preferito.<br>Dai 4 o 5 stelle a un titolo per vederlo qui.'
-        : 'Lista vuota.<br>Scrivi un titolo qui sopra per iniziare.'
-    }</div>`;
-    return;
-  }
-
-  list.innerHTML = subset.map(item => `
+function cardHtml(item){
+  return `
     <div class="card" data-id="${item.id}">
       ${item.rating >= 5 ? '<div class="hanko">TOP</div>' : ''}
       ${item.cover
@@ -480,12 +563,48 @@ function render(){
       <div class="card-info">
         <div class="card-title">${escapeHtml(item.title)}</div>
         <div class="card-meta">
-          <span class="badge">${item.type === 'anime' ? 'ANIME' : 'MANGA'}</span>
+          <span class="badge">${TYPE_LABELS[item.type]}</span>
           ${item.rating > 0 ? `<span class="stars">${starString(item.rating)}</span>` : '<span>non valutato</span>'}
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+}
+
+function updateTabCounts(){
+  ['anime','manga','tvshow'].forEach(t=>{
+    const n = items.filter(i=>i.type===t).length;
+    const el = document.getElementById('count-'+t);
+    if(el) el.textContent = n > 0 ? `(${n})` : '';
+  });
+}
+
+function render(){
+  updateTabCounts();
+  const list = document.getElementById('list');
+
+  if(currentTab === 'fav'){
+    const types = ['anime','manga','tvshow'];
+    const anyFav = items.some(i=>i.rating >= 4);
+    if(!anyFav){
+      list.innerHTML = `<div class="empty">Ancora nessun preferito.<br>Dai 4 o 5 stelle a un titolo per vederlo qui.</div>`;
+      return;
+    }
+    list.innerHTML = types.map(t=>{
+      const subset = items.filter(i => i.type === t && i.rating >= 4)
+        .sort((a,b)=> b.rating - a.rating || b.addedAt - a.addedAt);
+      if(subset.length === 0) return '';
+      return `<div class="fav-section-title">${TYPE_LABELS_FULL[t]} <span class="count">${subset.length}</span></div>`
+        + subset.map(cardHtml).join('');
+    }).join('');
+  } else {
+    const subset = items.filter(i => i.type === currentTab).sort((a,b)=> b.addedAt - a.addedAt);
+    if(subset.length === 0){
+      list.innerHTML = `<div class="empty">Lista vuota.<br>Scrivi un titolo qui sopra per iniziare.</div>`;
+      return;
+    }
+    list.innerHTML = subset.map(cardHtml).join('');
+  }
 
   document.querySelectorAll('.card').forEach(card=>{
     card.addEventListener('click', ()=> openModal(card.dataset.id));
@@ -511,7 +630,11 @@ function openModal(id){
         : `<div class="modal-thumb"></div>`}
       <div>
         <div class="modal-title">${escapeHtml(item.title)}</div>
-        <div class="modal-type">${item.type === 'anime' ? 'Anime · Visto' : 'Manga · Letto'}</div>
+        <div class="modal-type">${
+          item.type === 'anime' ? 'Anime · Visto' :
+          item.type === 'manga' ? 'Manga · Letto' :
+          'Serie TV · Vista'
+        }</div>
         <div class="rate-row">
           <div class="rate-label">QUANTO TI E' PIACIUTO</div>
           <div class="star-btns" id="starBtns">
@@ -522,6 +645,11 @@ function openModal(id){
     </div>
     <div class="synopsis ${item.synopsis ? '' : 'none'}">
       ${item.synopsis ? escapeHtml(item.synopsis) : 'Nessuna trama trovata per questo titolo.'}
+    </div>
+    <div class="notes-row">
+      <div class="notes-label">I TUOI APPUNTI</div>
+      <textarea id="noteArea" placeholder="Es: dove ero arrivato, cosa mi è piaciuto, con chi l'ho visto...">${escapeHtml(item.note || '')}</textarea>
+      <div class="notes-saved" id="notesSaved">Salvato ✓</div>
     </div>
     <div class="modal-actions">
       <button class="danger" id="deleteBtn">Rimuovi</button>
@@ -546,6 +674,21 @@ function openModal(id){
       openModal(id); // refresh
       render();
     });
+  });
+
+  const noteArea = document.getElementById('noteArea');
+  let noteTimer = null;
+  noteArea.addEventListener('input', ()=>{
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(async ()=>{
+      item.note = noteArea.value;
+      await saveItems();
+      const savedEl = document.getElementById('notesSaved');
+      if(savedEl){
+        savedEl.classList.add('show');
+        setTimeout(()=> savedEl.classList.remove('show'), 1500);
+      }
+    }, 500);
   });
 }
 
