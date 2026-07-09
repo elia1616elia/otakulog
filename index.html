@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otaku Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1c1a19;
+    --paper:#efe8da;
+    --paper-2:#e3dac8;
+    --vermillion:#b8352f;
+    --gold:#b6912a;
+    --grey:#8c8477;
+    --line: rgba(28,26,25,0.14);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    background-image:
+      radial-gradient(var(--line) 1px, transparent 1px);
+    background-size: 14px 14px;
+    color:var(--ink);
+    font-family:'Noto Sans', sans-serif;
+    min-height:100vh;
+    padding-bottom:40px;
+  }
+  header{
+    padding:28px 20px 18px;
+    text-align:center;
+    position:relative;
+  }
+  h1{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:900;
+    font-size:2.1rem;
+    letter-spacing:0.5px;
+    margin:0 0 2px;
+  }
+  h1 span{ color:var(--vermillion); }
+  .sub{
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.72rem;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--grey);
+  }
+  .tabs{
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    margin:20px 16px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .tab{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:700;
+    font-size:0.92rem;
+    padding:10px 16px;
+    cursor:pointer;
+    color:var(--grey);
+    border-bottom:3px solid transparent;
+    user-select:none;
+  }
+  .tab.active{
+    color:var(--ink);
+    border-bottom-color:var(--vermillion);
+  }
+  .addbar{
+    display:flex;
+    gap:8px;
+    margin:18px 16px 6px;
+  }
+  .addbar input{
+    flex:1;
+    padding:12px 14px;
+    border:1.5px solid var(--ink);
+    background:var(--paper-2);
+    border-radius:2px;
+    font-family:'Noto Sans', sans-serif;
+    font-size:0.95rem;
+    color:var(--ink);
+  }
+  .addbar input:focus{ outline:2px solid var(--vermillion); outline-offset:1px; }
+  .addbar button{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:700;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:0 18px;
+    border-radius:2px;
+    cursor:pointer;
+    font-size:0.9rem;
+  }
+  .addbar button:disabled{ opacity:0.5; cursor:default; }
+  .hint{
+    margin:2px 18px 14px;
+    font-size:0.76rem;
+    color:var(--grey);
+  }
+  .list{
+    margin:6px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .empty{
+    text-align:center;
+    color:var(--grey);
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.85rem;
+    padding:60px 20px;
+    line-height:1.6;
+  }
+  .card{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:var(--paper-2);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:10px 12px;
+    cursor:pointer;
+    position:relative;
+    transition:transform .12s ease;
+  }
+  .card:active{ transform:scale(0.985); }
+  .thumb{
+    width:44px;height:60px;
+    background:var(--grey);
+    border-radius:2px;
+    object-fit:cover;
+    flex-shrink:0;
+  }
+  .thumb.empty-thumb{
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Zen Kaku Gothic New';
+    font-size:1.1rem;
+    color:var(--paper);
+  }
+  .card-info{ flex:1; min-width:0; }
+  .card-title{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:700;
+    font-size:0.98rem;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .card-meta{
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.7rem;
+    color:var(--grey);
+    margin-top:3px;
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .badge{
+    font-size:0.62rem;
+    padding:1px 6px;
+    border:1px solid var(--grey);
+    border-radius:10px;
+    letter-spacing:0.5px;
+  }
+  .stars{ color:var(--gold); letter-spacing:1px; }
+  .hanko{
+    position:absolute;
+    top:6px;right:8px;
+    width:26px;height:26px;
+    border:2px solid var(--vermillion);
+    border-radius:50%;
+    color:var(--vermillion);
+    font-family:'Zen Kaku Gothic New';
+    font-weight:900;
+    font-size:0.6rem;
+    display:flex;align-items:center;justify-content:center;
+    transform:rotate(-8deg);
+    opacity:0.9;
+  }
+  /* modal */
+  .overlay{
+    position:fixed;inset:0;
+    background:rgba(20,18,17,0.55);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+    z-index:50;
+  }
+  .overlay.show{ display:flex; }
+  .modal{
+    background:var(--paper);
+    width:100%;
+    max-width:480px;
+    max-height:88vh;
+    overflow-y:auto;
+    border-radius:14px 14px 0 0;
+    padding:20px 20px 28px;
+    animation: rise .18s ease-out;
+  }
+  @keyframes rise{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  .modal-top{ display:flex; gap:14px; }
+  .modal-thumb{
+    width:100px;height:140px;
+    object-fit:cover;
+    border-radius:4px;
+    background:var(--grey);
+    flex-shrink:0;
+  }
+  .modal-title{
+    font-family:'Zen Kaku Gothic New';
+    font-weight:900;
+    font-size:1.25rem;
+    line-height:1.25;
+  }
+  .modal-type{
+    font-family:'JetBrains Mono';
+    font-size:0.7rem;
+    color:var(--grey);
+    margin-top:4px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+  .rate-row{ margin-top:10px; }
+  .rate-label{ font-size:0.72rem; color:var(--grey); font-family:'JetBrains Mono'; margin-bottom:4px; }
+  .star-btns{ font-size:1.35rem; letter-spacing:2px; cursor:pointer; color:var(--line); }
+  .star-btns span.on{ color:var(--gold); }
+  .synopsis{
+    margin-top:16px;
+    font-size:0.92rem;
+    line-height:1.55;
+    color:#2a2724;
+  }
+  .synopsis.none{ color:var(--grey); font-style:italic; }
+  .modal-actions{
+    display:flex;
+    gap:10px;
+    margin-top:20px;
+  }
+  .modal-actions button{
+    flex:1;
+    padding:11px;
+    border-radius:3px;
+    border:1.5px solid var(--ink);
+    background:transparent;
+    font-family:'Zen Kaku Gothic New';
+    font-weight:700;
+    font-size:0.85rem;
+    cursor:pointer;
+    color:var(--ink);
+  }
+  .modal-actions button.danger{
+    border-color:var(--vermillion);
+    color:var(--vermillion);
+  }
+  .close-x{
+    position:absolute; top:10px; right:16px;
+    font-size:1.4rem; color:var(--grey); cursor:pointer;
+    background:none;border:none;
+  }
+  .modal{ position:relative; }
+  footer{
+    display:flex;
+    justify-content:center;
+    gap:14px;
+    margin-top:26px;
+    padding:0 20px;
+  }
+  footer button{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--grey);
+    font-family:'JetBrains Mono';
+    font-size:0.72rem;
+    padding:8px 14px;
+    border-radius:20px;
+    cursor:pointer;
+  }
+  #fileInput{ display:none; }
+  .toast{
+    position:fixed;
+    bottom:20px; left:50%;
+    transform:translateX(-50%);
+    background:var(--ink);
+    color:var(--paper);
+    padding:10px 18px;
+    border-radius:20px;
+    font-family:'JetBrains Mono';
+    font-size:0.78rem;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s;
+    z-index:99;
+    white-space:nowrap;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Otaku<span>Log</span></h1>
+  <div class="sub">La tua lista, il tuo sigillo</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="anime">Anime</div>
+  <div class="tab" data-tab="manga">Manga</div>
+  <div class="tab" data-tab="fav">Preferiti</div>
+</div>
+
+<div class="addbar" id="addbarWrap">
+  <input id="titleInput" placeholder="Scrivi un titolo..." autocomplete="off">
+  <button id="addBtn">Aggiungi</button>
+</div>
+<div class="hint" id="hint">Cerco copertina e trama automaticamente su MyAnimeList.</div>
+
+<div class="list" id="list"></div>
+
+<footer>
+  <button id="exportBtn">Esporta backup</button>
+  <button id="importBtn">Importa backup</button>
+</footer>
+<input type="file" id="fileInput" accept="application/json">
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'otakulog_items';
+let items = [];
+let currentTab = 'anime';
+let openItemId = null;
+
+function uid(){ return 'i' + Date.now() + Math.random().toString(36).slice(2,7); }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+async function loadItems(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    items = res && res.value ? JSON.parse(res.value) : [];
+  }catch(e){
+    items = [];
+  }
+  render();
+}
+
+async function saveItems(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(items), false);
+  }catch(e){
+    showToast('Errore nel salvataggio locale');
+  }
+}
+
+// --- Jikan API search ---
+async function searchTitle(query, type){
+  const endpoint = type === 'anime' ? 'anime' : 'manga';
+  const url = `https://api.jikan.moe/v4/${endpoint}?q=${encodeURIComponent(query)}&limit=1`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('network');
+  const data = await res.json();
+  if(data.data && data.data.length > 0){
+    const d = data.data[0];
+    return {
+      cover: d.images && d.images.jpg ? d.images.jpg.image_url : '',
+      synopsis: d.synopsis || '',
+      matchedTitle: d.title || query,
+      malId: d.mal_id || null
+    };
+  }
+  return null;
+}
+
+document.getElementById('addBtn').addEventListener('click', addItem);
+document.getElementById('titleInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') addItem();
+});
+
+async function addItem(){
+  const input = document.getElementById('titleInput');
+  const btn = document.getElementById('addBtn');
+  const raw = input.value.trim();
+  if(!raw) return;
+  const type = currentTab === 'manga' ? 'manga' : 'anime';
+
+  btn.disabled = true;
+  btn.textContent = 'Cerco...';
+
+  let meta = null;
+  try{
+    meta = await searchTitle(raw, type);
+  }catch(e){
+    meta = null;
+  }
+
+  const newItem = {
+    id: uid(),
+    title: meta ? meta.matchedTitle : raw,
+    type: type,
+    cover: meta ? meta.cover : '',
+    synopsis: meta ? meta.synopsis : '',
+    rating: 0,
+    addedAt: Date.now()
+  };
+  items.unshift(newItem);
+  await saveItems();
+
+  input.value = '';
+  btn.disabled = false;
+  btn.textContent = 'Aggiungi';
+  showToast(meta ? 'Trovato e salvato' : 'Salvato (nessuna info trovata)');
+  render();
+}
+
+// --- Tabs ---
+document.querySelectorAll('.tab').forEach(tabEl=>{
+  tabEl.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tabEl.classList.add('active');
+    currentTab = tabEl.dataset.tab;
+    const wrap = document.getElementById('addbarWrap');
+    const hint = document.getElementById('hint');
+    if(currentTab === 'fav'){
+      wrap.style.display = 'none';
+      hint.style.display = 'none';
+    } else {
+      wrap.style.display = 'flex';
+      hint.style.display = 'block';
+      document.getElementById('titleInput').placeholder =
+        currentTab === 'anime' ? 'Scrivi un titolo anime...' : 'Scrivi un titolo manga...';
+    }
+    render();
+  });
+});
+
+function starString(n){
+  let s = '';
+  for(let i=1;i<=5;i++) s += i<=n ? '★' : '☆';
+  return s;
+}
+
+function render(){
+  const list = document.getElementById('list');
+  let subset;
+  if(currentTab === 'fav'){
+    subset = items.filter(i => i.rating >= 4).sort((a,b)=> b.rating - a.rating || b.addedAt - a.addedAt);
+  } else {
+    subset = items.filter(i => i.type === currentTab).sort((a,b)=> b.addedAt - a.addedAt);
+  }
+
+  if(subset.length === 0){
+    list.innerHTML = `<div class="empty">${
+      currentTab === 'fav'
+        ? 'Ancora nessun preferito.<br>Dai 4 o 5 stelle a un titolo per vederlo qui.'
+        : 'Lista vuota.<br>Scrivi un titolo qui sopra per iniziare.'
+    }</div>`;
+    return;
+  }
+
+  list.innerHTML = subset.map(item => `
+    <div class="card" data-id="${item.id}">
+      ${item.rating >= 5 ? '<div class="hanko">TOP</div>' : ''}
+      ${item.cover
+        ? `<img class="thumb" src="${item.cover}" alt="">`
+        : `<div class="thumb empty-thumb">?</div>`}
+      <div class="card-info">
+        <div class="card-title">${escapeHtml(item.title)}</div>
+        <div class="card-meta">
+          <span class="badge">${item.type === 'anime' ? 'ANIME' : 'MANGA'}</span>
+          ${item.rating > 0 ? `<span class="stars">${starString(item.rating)}</span>` : '<span>non valutato</span>'}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('click', ()=> openModal(card.dataset.id));
+  });
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function openModal(id){
+  openItemId = id;
+  const item = items.find(i=>i.id===id);
+  if(!item) return;
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <button class="close-x" id="closeX">&times;</button>
+    <div class="modal-top">
+      ${item.cover
+        ? `<img class="modal-thumb" src="${item.cover}" alt="">`
+        : `<div class="modal-thumb"></div>`}
+      <div>
+        <div class="modal-title">${escapeHtml(item.title)}</div>
+        <div class="modal-type">${item.type === 'anime' ? 'Anime · Visto' : 'Manga · Letto'}</div>
+        <div class="rate-row">
+          <div class="rate-label">QUANTO TI E' PIACIUTO</div>
+          <div class="star-btns" id="starBtns">
+            ${[1,2,3,4,5].map(n=>`<span data-n="${n}" class="${n<=item.rating?'on':''}">★</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="synopsis ${item.synopsis ? '' : 'none'}">
+      ${item.synopsis ? escapeHtml(item.synopsis) : 'Nessuna trama trovata per questo titolo.'}
+    </div>
+    <div class="modal-actions">
+      <button class="danger" id="deleteBtn">Rimuovi</button>
+      <button id="doneBtn">Chiudi</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+
+  document.getElementById('closeX').addEventListener('click', closeModal);
+  document.getElementById('doneBtn').addEventListener('click', closeModal);
+  document.getElementById('deleteBtn').addEventListener('click', async ()=>{
+    items = items.filter(i=>i.id !== id);
+    await saveItems();
+    closeModal();
+    render();
+  });
+  document.querySelectorAll('#starBtns span').forEach(s=>{
+    s.addEventListener('click', async ()=>{
+      const n = parseInt(s.dataset.n);
+      item.rating = item.rating === n ? 0 : n; // click di nuovo sull'ultima stella per azzerare
+      await saveItems();
+      openModal(id); // refresh
+      render();
+    });
+  });
+}
+
+function closeModal(){
+  document.getElementById('overlay').classList.remove('show');
+  openItemId = null;
+}
+document.getElementById('overlay').addEventListener('click', e=>{
+  if(e.target.id === 'overlay') closeModal();
+});
+
+// --- Export / Import (backup manuale, es. per OneDrive) ---
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(items, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'otakulog_backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup scaricato');
+});
+
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('fileInput').click();
+});
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if(Array.isArray(parsed)){
+      items = parsed;
+      await saveItems();
+      render();
+      showToast('Backup importato');
+    } else {
+      showToast('File non valido');
+    }
+  }catch(err){
+    showToast('Errore nella lettura del file');
+  }
+  e.target.value = '';
+});
+
+loadItems();
+</script>
+</body>
+</html>
