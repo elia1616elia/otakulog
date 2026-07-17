@@ -6,6 +6,7 @@
 <title>Otaku Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogle()"></script>
 <style>
   :root{
     --ink:#1c1a19;
@@ -352,6 +353,18 @@
     cursor:pointer;
   }
   #fileInput{ display:none; }
+  .drive-status{
+    text-align:center;
+    font-family:'JetBrains Mono';
+    font-size:0.7rem;
+    color:var(--grey);
+    margin-top:10px;
+  }
+  .drive-status.connected{ color:#4a7c4a; }
+  #driveBtn.connected{
+    border-color:#4a7c4a;
+    color:#4a7c4a;
+  }
   .toast{
     position:fixed;
     bottom:20px; left:50%;
@@ -394,9 +407,11 @@
 <div class="list" id="list"></div>
 
 <footer>
+  <button id="driveBtn">Accedi con Google Drive</button>
   <button id="exportBtn">Esporta backup</button>
   <button id="importBtn">Importa backup</button>
 </footer>
+<div class="drive-status" id="driveStatus"></div>
 <input type="file" id="fileInput" accept="application/json">
 
 <div class="overlay" id="overlay">
@@ -435,6 +450,133 @@ async function saveItems(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }catch(e){
     showToast('Errore nel salvataggio locale');
+  }
+  if(gAccessToken){
+    try{
+      await driveUpload(JSON.stringify(items));
+    }catch(e){
+      // Silenzioso: il salvataggio locale è comunque riuscito
+    }
+  }
+}
+
+// ================= GOOGLE DRIVE SYNC =================
+const GOOGLE_CLIENT_ID = '926600368524-jbfgq5gjml2cbgqji1sc1r8pq7ugvkj7.apps.googleusercontent.com';
+const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+let gTokenClient = null;
+let gAccessToken = null;
+let gDriveFileId = null;
+
+function initGoogle(){
+  if(typeof google === 'undefined') return;
+  gTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_SCOPE,
+    callback: async (resp)=>{
+      if(resp.error){
+        showToast('Accesso a Google non riuscito');
+        return;
+      }
+      gAccessToken = resp.access_token;
+      setDriveUI(true, 'Sincronizzazione in corso...');
+      await syncFromDriveOnLogin();
+    }
+  });
+  document.getElementById('driveBtn').addEventListener('click', ()=>{
+    if(gAccessToken){
+      showToast('Sei già connesso');
+      return;
+    }
+    gTokenClient.requestAccessToken({ prompt: 'consent' });
+  });
+}
+
+function setDriveUI(connected, statusText){
+  const btn = document.getElementById('driveBtn');
+  const status = document.getElementById('driveStatus');
+  if(connected){
+    btn.textContent = 'Connesso a Google Drive ✓';
+    btn.classList.add('connected');
+    status.textContent = statusText || 'I tuoi dati si sincronizzano automaticamente';
+    status.classList.add('connected');
+  } else {
+    btn.textContent = 'Accedi con Google Drive';
+    btn.classList.remove('connected');
+    status.textContent = statusText || '';
+    status.classList.remove('connected');
+  }
+}
+
+async function driveFetch(url, options={}){
+  options.headers = Object.assign({}, options.headers, { 'Authorization': 'Bearer ' + gAccessToken });
+  return fetch(url, options);
+}
+
+async function driveFindFile(){
+  const q = encodeURIComponent("name='otakulog_data.json'");
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name)`);
+  const data = await res.json();
+  if(data.files && data.files.length > 0) return data.files[0].id;
+  return null;
+}
+
+async function driveDownload(fileId){
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+  if(!res.ok) throw new Error('download failed');
+  return await res.text();
+}
+
+async function driveUpload(content){
+  if(gDriveFileId){
+    await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${gDriveFileId}?uploadType=media`, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: content
+    });
+  } else {
+    const boundary = 'otakulog_boundary_xyz';
+    const metadata = { name:'otakulog_data.json', parents:['appDataFolder'] };
+    const body =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n` +
+      `--${boundary}--`;
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method:'POST',
+      headers:{'Content-Type': `multipart/related; boundary=${boundary}`},
+      body
+    });
+    const data = await res.json();
+    gDriveFileId = data.id;
+  }
+}
+
+async function syncFromDriveOnLogin(){
+  try{
+    const fileId = await driveFindFile();
+    if(fileId){
+      gDriveFileId = fileId;
+      const remoteText = await driveDownload(fileId);
+      const remoteItems = JSON.parse(remoteText);
+      if(Array.isArray(remoteItems) && remoteItems.length > 0){
+        const useRemote = confirm(
+          `Ho trovato un backup su Google Drive con ${remoteItems.length} titoli.\n\nOK = carica quello di Drive (sostituisce quello che vedi ora)\nAnnulla = tieni quello che vedi ora su questo dispositivo`
+        );
+        if(useRemote){
+          items = remoteItems;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+          render();
+        } else {
+          await driveUpload(JSON.stringify(items));
+        }
+      }
+    } else {
+      await driveUpload(JSON.stringify(items));
+    }
+    setDriveUI(true);
+    showToast('Connesso a Google Drive');
+  }catch(e){
+    setDriveUI(true, 'Connesso, ma la sincronizzazione ha avuto un problema');
+    showToast('Errore nella sincronizzazione con Drive');
   }
 }
 
