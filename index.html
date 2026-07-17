@@ -467,6 +467,8 @@ let gTokenClient = null;
 let gAccessToken = null;
 let gDriveFileId = null;
 
+let gAutoAttempt = false;
+
 function initGoogle(){
   if(typeof google === 'undefined') return;
   gTokenClient = google.accounts.oauth2.initTokenClient({
@@ -474,12 +476,15 @@ function initGoogle(){
     scope: GOOGLE_SCOPE,
     callback: async (resp)=>{
       if(resp.error){
-        showToast('Accesso a Google non riuscito');
+        if(!gAutoAttempt) showToast('Accesso a Google non riuscito');
+        gAutoAttempt = false;
         return;
       }
       gAccessToken = resp.access_token;
+      localStorage.setItem('otakulog_drive_connected', '1');
       setDriveUI(true, 'Sincronizzazione in corso...');
       await syncFromDriveOnLogin();
+      gAutoAttempt = false;
     }
   });
   document.getElementById('driveBtn').addEventListener('click', ()=>{
@@ -489,6 +494,13 @@ function initGoogle(){
     }
     gTokenClient.requestAccessToken({ prompt: 'consent' });
   });
+
+  // Se in passato l'utente si era connesso, proviamo una riconnessione
+  // silenziosa senza mostrare popup, appena la pagina si apre.
+  if(localStorage.getItem('otakulog_drive_connected') === '1'){
+    gAutoAttempt = true;
+    gTokenClient.requestAccessToken({ prompt: '' });
+  }
 }
 
 function setDriveUI(connected, statusText){
