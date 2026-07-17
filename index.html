@@ -422,8 +422,8 @@ function showToast(msg){
 
 async function loadItems(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    items = res && res.value ? JSON.parse(res.value) : [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    items = raw ? JSON.parse(raw) : [];
   }catch(e){
     items = [];
   }
@@ -432,7 +432,7 @@ async function loadItems(){
 
 async function saveItems(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(items), false);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }catch(e){
     showToast('Errore nel salvataggio locale');
   }
