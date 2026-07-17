@@ -83,6 +83,33 @@
     gap:8px;
     margin:18px 16px 6px;
   }
+  .search-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:14px 16px 0;
+  }
+  .search-toggle{
+    background:var(--paper-2);
+    border:1.5px solid var(--ink);
+    border-radius:2px;
+    width:38px;height:38px;
+    font-size:1rem;
+    cursor:pointer;
+    flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .search-row input{
+    flex:1;
+    padding:9px 12px;
+    border:1.5px solid var(--ink);
+    background:var(--paper-2);
+    border-radius:2px;
+    font-family:'Noto Sans', sans-serif;
+    font-size:0.9rem;
+    color:var(--ink);
+  }
+  .search-row input:focus{ outline:2px solid var(--vermillion); outline-offset:1px; }
   .addbar input{
     flex:1;
     padding:12px 14px;
@@ -398,6 +425,11 @@
   <div class="tab" data-tab="fav">Preferiti</div>
 </div>
 
+<div class="search-row">
+  <button class="search-toggle" id="searchToggleBtn" aria-label="Cerca">🔍</button>
+  <input id="searchInput" placeholder="Cerca in questa sezione..." style="display:none;">
+</div>
+
 <div class="addbar" id="addbarWrap">
   <input id="titleInput" placeholder="Scrivi un titolo..." autocomplete="off">
   <button id="addBtn">Aggiungi</button>
@@ -425,6 +457,25 @@ const STORAGE_KEY = 'otakulog_items';
 let items = [];
 let currentTab = 'anime';
 let openItemId = null;
+let searchQuery = '';
+
+document.getElementById('searchToggleBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('searchInput');
+  const showing = input.style.display !== 'none';
+  if(showing){
+    input.style.display = 'none';
+    input.value = '';
+    searchQuery = '';
+    render();
+  } else {
+    input.style.display = 'block';
+    input.focus();
+  }
+});
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  searchQuery = e.target.value.trim().toLowerCase();
+  render();
+});
 
 function uid(){ return 'i' + Date.now() + Math.random().toString(36).slice(2,7); }
 
@@ -467,8 +518,6 @@ let gTokenClient = null;
 let gAccessToken = null;
 let gDriveFileId = null;
 
-let gAutoAttempt = false;
-
 function initGoogle(){
   if(typeof google === 'undefined') return;
   gTokenClient = google.accounts.oauth2.initTokenClient({
@@ -476,15 +525,13 @@ function initGoogle(){
     scope: GOOGLE_SCOPE,
     callback: async (resp)=>{
       if(resp.error){
-        if(!gAutoAttempt) showToast('Accesso a Google non riuscito');
-        gAutoAttempt = false;
+        showToast('Accesso a Google non riuscito');
         return;
       }
       gAccessToken = resp.access_token;
       localStorage.setItem('otakulog_drive_connected', '1');
       setDriveUI(true, 'Sincronizzazione in corso...');
       await syncFromDriveOnLogin();
-      gAutoAttempt = false;
     }
   });
   document.getElementById('driveBtn').addEventListener('click', ()=>{
@@ -495,11 +542,11 @@ function initGoogle(){
     gTokenClient.requestAccessToken({ prompt: 'consent' });
   });
 
-  // Se in passato l'utente si era connesso, proviamo una riconnessione
-  // silenziosa senza mostrare popup, appena la pagina si apre.
+  // Se ti eri già connesso in passato, l'app lo ricorda e te lo segnala,
+  // ma NON forza più un login automatico ad ogni apertura: lo fai tu,
+  // solo quando vuoi davvero sincronizzare.
   if(localStorage.getItem('otakulog_drive_connected') === '1'){
-    gAutoAttempt = true;
-    gTokenClient.requestAccessToken({ prompt: '' });
+    setDriveUI(false, 'Backup Google Drive collegato in precedenza — premi per sincronizzare');
   }
 }
 
@@ -569,9 +616,13 @@ async function syncFromDriveOnLogin(){
       gDriveFileId = fileId;
       const remoteText = await driveDownload(fileId);
       const remoteItems = JSON.parse(remoteText);
-      if(Array.isArray(remoteItems) && remoteItems.length > 0){
+      const sameData = JSON.stringify(remoteItems) === JSON.stringify(items);
+
+      if(sameData){
+        // Già tutto allineato: nessun alert, sincronizzazione silenziosa.
+      } else if(Array.isArray(remoteItems) && remoteItems.length > 0){
         const useRemote = confirm(
-          `Ho trovato un backup su Google Drive con ${remoteItems.length} titoli.\n\nOK = carica quello di Drive (sostituisce quello che vedi ora)\nAnnulla = tieni quello che vedi ora su questo dispositivo`
+          `Ho trovato un backup su Google Drive con ${remoteItems.length} titoli, diverso da quello che vedi ora su questo dispositivo (${items.length} titoli).\n\nOK = carica quello di Drive (sostituisce quello che vedi ora)\nAnnulla = tieni quello che vedi ora e lo carico su Drive`
         );
         if(useRemote){
           items = remoteItems;
@@ -580,6 +631,8 @@ async function syncFromDriveOnLogin(){
         } else {
           await driveUpload(JSON.stringify(items));
         }
+      } else {
+        await driveUpload(JSON.stringify(items));
       }
     } else {
       await driveUpload(JSON.stringify(items));
@@ -682,6 +735,9 @@ document.querySelectorAll('.tab').forEach(tabEl=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     tabEl.classList.add('active');
     currentTab = tabEl.dataset.tab;
+    searchQuery = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').style.display = 'none';
     const wrap = document.getElementById('addbarWrap');
     const hint = document.getElementById('hint');
     if(currentTab === 'fav'){
@@ -754,20 +810,34 @@ function render(){
       list.innerHTML = `<div class="empty">Ancora nessun preferito.<br>Dai 4 o 5 stelle a un titolo per vederlo qui.</div>`;
       return;
     }
-    list.innerHTML = types.map(t=>{
-      const subset = items.filter(i => i.type === t && i.rating >= 4)
+    let html = types.map(t=>{
+      let subset = items.filter(i => i.type === t && i.rating >= 4)
         .sort((a,b)=> b.rating - a.rating || b.addedAt - a.addedAt);
+      const totalCount = subset.length;
+      if(searchQuery) subset = subset.filter(i => i.title.toLowerCase().includes(searchQuery));
       if(subset.length === 0) return '';
-      return `<div class="fav-section-title">${TYPE_LABELS_FULL[t]} <span class="count">${subset.length}</span></div>`
-        + subset.map(cardHtml).join('');
+      return `<div class="fav-section-title">${TYPE_LABELS_FULL[t]} <span class="count">${totalCount}</span></div>`
+        + subset.map(item => cardHtml(item)).join('');
     }).join('');
+    if(searchQuery && html.trim() === ''){
+      html = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
+    }
+    list.innerHTML = html;
   } else {
-    const subset = items.filter(i => i.type === currentTab).sort((a,b)=> a.addedAt - b.addedAt);
-    if(subset.length === 0){
+    const fullSorted = items.filter(i => i.type === currentTab).sort((a,b)=> a.addedAt - b.addedAt);
+    if(fullSorted.length === 0){
       list.innerHTML = `<div class="empty">Lista vuota.<br>Scrivi un titolo qui sopra per iniziare.</div>`;
       return;
     }
-    list.innerHTML = subset.map((item, idx) => cardHtml(item, idx+1)).join('');
+    const numbered = fullSorted.map((item, idx) => ({ item, num: idx+1 }));
+    const visible = searchQuery
+      ? numbered.filter(x => x.item.title.toLowerCase().includes(searchQuery))
+      : numbered;
+    if(visible.length === 0){
+      list.innerHTML = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
+      return;
+    }
+    list.innerHTML = visible.map(x => cardHtml(x.item, x.num)).join('');
   }
 
   document.querySelectorAll('.card').forEach(card=>{
