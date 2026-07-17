@@ -692,12 +692,28 @@ document.getElementById('titleInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter') addItem();
 });
 
+function normalizeTitle(t){
+  return t.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function findDuplicate(title, type){
+  const norm = normalizeTitle(title);
+  return items.find(i => i.type === type && normalizeTitle(i.title) === norm);
+}
+
 async function addItem(){
   const input = document.getElementById('titleInput');
   const btn = document.getElementById('addBtn');
   const raw = input.value.trim();
   if(!raw) return;
   const type = currentTab; // 'anime' | 'manga' | 'tvshow'
+
+  const earlyDup = findDuplicate(raw, type);
+  if(earlyDup){
+    showToast(`"${earlyDup.title}" è già nella tua lista`);
+    openModal(earlyDup.id);
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = 'Cerco...';
@@ -707,6 +723,17 @@ async function addItem(){
     meta = await searchTitle(raw, type);
   }catch(e){
     meta = null;
+  }
+
+  if(meta){
+    const lateDup = findDuplicate(meta.matchedTitle, type);
+    if(lateDup){
+      btn.disabled = false;
+      btn.textContent = 'Aggiungi';
+      showToast(`"${lateDup.title}" è già nella tua lista`);
+      openModal(lateDup.id);
+      return;
+    }
   }
 
   const newItem = {
