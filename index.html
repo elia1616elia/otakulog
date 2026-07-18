@@ -682,9 +682,18 @@ async function searchTVMaze(query){
   return null;
 }
 
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
 async function searchTitle(query, type){
-  if(type === 'tvshow') return searchTVMaze(query);
-  return searchJikan(query, type);
+  const doSearch = () => type === 'tvshow' ? searchTVMaze(query) : searchJikan(query, type);
+  try{
+    return await doSearch();
+  }catch(e){
+    // Le API gratuite (Jikan/TVmaze) a volte hanno intoppi momentanei:
+    // riprovo una seconda volta dopo una breve pausa prima di arrendermi.
+    await sleep(900);
+    return await doSearch();
+  }
 }
 
 document.getElementById('addBtn').addEventListener('click', addItem);
@@ -907,6 +916,10 @@ function openModal(id){
     <div class="synopsis ${item.synopsis ? '' : 'none'}">
       ${item.synopsis ? escapeHtml(item.synopsis) : 'Nessuna trama trovata per questo titolo.'}
     </div>
+    ${!item.cover && !item.synopsis ? `
+    <div class="modal-actions" style="margin-top:12px;">
+      <button id="retryBtn">🔄 Cerca di nuovo copertina/trama</button>
+    </div>` : ''}
     <div class="notes-row">
       <div class="notes-label">I TUOI APPUNTI</div>
       <textarea id="noteArea" placeholder="Es: dove ero arrivato, cosa mi è piaciuto, con chi l'ho visto...">${escapeHtml(item.note || '')}</textarea>
@@ -921,6 +934,33 @@ function openModal(id){
 
   document.getElementById('closeX').addEventListener('click', closeModal);
   document.getElementById('doneBtn').addEventListener('click', closeModal);
+
+  const retryBtn = document.getElementById('retryBtn');
+  if(retryBtn){
+    retryBtn.addEventListener('click', async ()=>{
+      retryBtn.disabled = true;
+      retryBtn.textContent = 'Cerco...';
+      try{
+        const meta = await searchTitle(item.title, item.type);
+        if(meta){
+          item.cover = meta.cover;
+          item.synopsis = meta.synopsis;
+          await saveItems();
+          showToast('Trovato!');
+          openModal(id);
+          render();
+        } else {
+          showToast('Ancora nessuna info trovata per questo titolo');
+          retryBtn.disabled = false;
+          retryBtn.textContent = '🔄 Cerca di nuovo copertina/trama';
+        }
+      }catch(e){
+        showToast('Il servizio non risponde, riprova tra poco');
+        retryBtn.disabled = false;
+        retryBtn.textContent = '🔄 Cerca di nuovo copertina/trama';
+      }
+    });
+  }
   document.getElementById('deleteBtn').addEventListener('click', async ()=>{
     items = items.filter(i=>i.id !== id);
     await saveItems();
