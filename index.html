@@ -912,17 +912,25 @@ function render(){
     }
     list.innerHTML = html;
   } else if(currentTab === 'inprogress'){
-    let subset = items.filter(i => i.inProgress).sort((a,b)=> b.addedAt - a.addedAt);
-    if(subset.length === 0){
+    const types = ['anime','manga','tvshow'];
+    const anyInProgress = items.some(i => i.inProgress);
+    if(!anyInProgress){
       list.innerHTML = `<div class="empty">Niente "in corso" al momento.<br>Apri un titolo e spunta "In corso" per vederlo qui.</div>`;
       return;
     }
-    if(searchQuery) subset = subset.filter(i => i.title.toLowerCase().includes(searchQuery));
-    if(subset.length === 0){
-      list.innerHTML = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
-      return;
+    let html = types.map(t=>{
+      let subset = items.filter(i => i.type === t && i.inProgress)
+        .sort((a,b)=> b.addedAt - a.addedAt);
+      const totalCount = subset.length;
+      if(searchQuery) subset = subset.filter(i => i.title.toLowerCase().includes(searchQuery));
+      if(subset.length === 0) return '';
+      return `<div class="fav-section-title">${TYPE_LABELS_FULL[t]} <span class="count">${totalCount}</span></div>`
+        + subset.map(item => cardHtml(item)).join('');
+    }).join('');
+    if(searchQuery && html.trim() === ''){
+      html = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
     }
-    list.innerHTML = subset.map(item => cardHtml(item)).join('');
+    list.innerHTML = html;
   } else {
     const fullSorted = items.filter(i => i.type === currentTab).sort((a,b)=> a.addedAt - b.addedAt);
     if(fullSorted.length === 0){
