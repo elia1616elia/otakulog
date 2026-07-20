@@ -212,6 +212,33 @@
     border-radius:10px;
     letter-spacing:0.5px;
   }
+  .in-progress-badge{
+    font-size:0.62rem;
+    padding:1px 6px;
+    background:var(--vermillion);
+    color:var(--paper);
+    border-radius:10px;
+    letter-spacing:0.5px;
+    font-weight:600;
+  }
+  .progress-toggle{
+    margin-top:14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .progress-toggle input{
+    width:18px;height:18px;
+    accent-color:var(--vermillion);
+    cursor:pointer;
+  }
+  .progress-toggle span{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:700;
+    font-size:0.85rem;
+  }
   .stars{ color:var(--gold); letter-spacing:1px; }
   .fav-section-title{
     font-family:'Zen Kaku Gothic New', sans-serif;
@@ -422,6 +449,7 @@
   <div class="tab active" data-tab="anime">Anime<span class="tab-count" id="count-anime"></span></div>
   <div class="tab" data-tab="manga">Manga<span class="tab-count" id="count-manga"></span></div>
   <div class="tab" data-tab="tvshow">Serie TV<span class="tab-count" id="count-tvshow"></span></div>
+  <div class="tab" data-tab="inprogress">In Corso</div>
   <div class="tab" data-tab="fav">Preferiti</div>
 </div>
 
@@ -775,6 +803,7 @@ async function addItem(){
     synopsis: meta ? meta.synopsis : '',
     rating: 0,
     note: '',
+    inProgress: false,
     addedAt: Date.now()
   };
   items.unshift(newItem);
@@ -798,7 +827,7 @@ document.querySelectorAll('.tab').forEach(tabEl=>{
     document.getElementById('searchInput').style.display = 'none';
     const wrap = document.getElementById('addbarWrap');
     const hint = document.getElementById('hint');
-    if(currentTab === 'fav'){
+    if(currentTab === 'fav' || currentTab === 'inprogress'){
       wrap.style.display = 'none';
       hint.style.display = 'none';
     } else {
@@ -842,6 +871,7 @@ function cardHtml(item, num){
         <div class="card-title">${escapeHtml(item.title)}</div>
         <div class="card-meta">
           <span class="badge">${TYPE_LABELS[item.type]}</span>
+          ${item.inProgress ? '<span class="in-progress-badge">IN CORSO</span>' : ''}
           ${item.rating > 0 ? `<span class="stars">${starString(item.rating)}</span>` : '<span>non valutato</span>'}
         </div>
       </div>
@@ -881,6 +911,18 @@ function render(){
       html = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
     }
     list.innerHTML = html;
+  } else if(currentTab === 'inprogress'){
+    let subset = items.filter(i => i.inProgress).sort((a,b)=> b.addedAt - a.addedAt);
+    if(subset.length === 0){
+      list.innerHTML = `<div class="empty">Niente "in corso" al momento.<br>Apri un titolo e spunta "In corso" per vederlo qui.</div>`;
+      return;
+    }
+    if(searchQuery) subset = subset.filter(i => i.title.toLowerCase().includes(searchQuery));
+    if(subset.length === 0){
+      list.innerHTML = `<div class="empty">Nessun risultato per "${escapeHtml(searchQuery)}".</div>`;
+      return;
+    }
+    list.innerHTML = subset.map(item => cardHtml(item)).join('');
   } else {
     const fullSorted = items.filter(i => i.type === currentTab).sort((a,b)=> a.addedAt - b.addedAt);
     if(fullSorted.length === 0){
@@ -933,6 +975,10 @@ function openModal(id){
             ${[1,2,3,4,5].map(n=>`<span data-n="${n}" class="${n<=item.rating?'on':''}">★</span>`).join('')}
           </div>
         </div>
+        <label class="progress-toggle">
+          <input type="checkbox" id="progressCheck" ${item.inProgress ? 'checked' : ''}>
+          <span>In corso</span>
+        </label>
       </div>
     </div>
     <div class="synopsis ${item.synopsis ? '' : 'none'}">
@@ -956,6 +1002,12 @@ function openModal(id){
 
   document.getElementById('closeX').addEventListener('click', closeModal);
   document.getElementById('doneBtn').addEventListener('click', closeModal);
+
+  document.getElementById('progressCheck').addEventListener('change', async (e)=>{
+    item.inProgress = e.target.checked;
+    await saveItems();
+    render();
+  });
 
   const retryBtn = document.getElementById('retryBtn');
   if(retryBtn){
